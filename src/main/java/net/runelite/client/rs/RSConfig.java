@@ -69,4 +69,8 @@ class RSConfig
 	{
 		return classLoaderProperties.get("runelite.worldparam");
 	}
+
+	Map<String, String> getAppletProperties() {
+		return appletProperties;
+	}
 }

@@ -40,7 +40,6 @@ public class NPCQuery extends ActorQuery<NPC, NPCQuery>
 			.collect(Collectors.toList()));
 	}
 
-	@SuppressWarnings("unchecked")
 	public NPCQuery idEquals(int... ids)
 	{
 		predicate = and(object ->
@@ -57,7 +56,6 @@ public class NPCQuery extends ActorQuery<NPC, NPCQuery>
 		return this;
 	}
 
-	@SuppressWarnings("unchecked")
 	public NPCQuery idEquals(Collection<Integer> ids)
 	{
 		predicate = and((object) -> ids.contains(object.getId()));

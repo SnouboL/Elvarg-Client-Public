@@ -31,10 +31,13 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import lombok.RequiredArgsConstructor;
 
-@RequiredArgsConstructor
 class RSAppletStub implements AppletStub
 {
 	private final RSConfig config;
+
+	RSAppletStub(RSConfig config) {
+		this.config = config;
+	}
 
 	@Override
 	public boolean isActive()

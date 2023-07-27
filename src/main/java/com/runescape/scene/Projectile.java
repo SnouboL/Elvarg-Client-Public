@@ -101,7 +101,6 @@ public final class Projectile extends Renderable implements RSProjectile {
         yPos += yIncrement * (double)cyclesMissed;
         cnterHeight += heightIncrement * (double)cyclesMissed + 0.5D * aDouble1578 * (double)cyclesMissed * (double)cyclesMissed;
         heightIncrement += aDouble1578 * (double)cyclesMissed;
-        //noinspection SuspiciousNameCombination
         turnValue = (int)(Math.atan2(xIncrement, yIncrement) * 325.94900000000001D) + 1024 & 0x7ff;
         tiltAngle = (int)(Math.atan2(heightIncrement, diagonalIncrement) * 325.94900000000001D) & 0x7ff;
         if(projectileGFX.animationSequence != null) {

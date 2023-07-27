@@ -24,7 +24,6 @@
  */
 package net.runelite.client.game.chatbox;
 
-import com.google.common.base.Strings;
 import com.google.common.primitives.Ints;
 import com.google.inject.Inject;
 import java.awt.Point;
@@ -38,6 +37,7 @@ import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.IntPredicate;
 import java.util.function.Predicate;
@@ -49,7 +49,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.FontID;
 import net.runelite.api.FontTypeFace;
-import net.runelite.api.widgets.JavaScriptCallback;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetPositionMode;
 import net.runelite.api.widgets.WidgetSizeMode;
@@ -63,7 +62,7 @@ import net.runelite.client.util.Text;
 @Slf4j
 public class ChatboxTextInput extends ChatboxInput implements KeyListener, MouseListener
 {
-	private static final int CURSOR_FLASH_RATE_MILLIS = 1000;
+	private static final int CURSOR_FLASH_RATE_MILLIS = 100;
 	private static final Pattern BREAK_MATCHER = Pattern.compile("[^a-zA-Z0-9']");
 
 	private final ChatboxPanelManager chatboxPanelManager;
@@ -135,14 +134,13 @@ public class ChatboxTextInput extends ChatboxInput implements KeyListener, Mouse
 		return this;
 	}
 
-	public ChatboxTextInput lines(int lines)
+	public void lines(int lines)
 	{
 		this.lines = lines;
 		if (built)
 		{
 			clientThread.invoke(this::update);
 		}
-		return this;
 	}
 
 	public ChatboxTextInput prompt(String prompt)
@@ -170,12 +168,12 @@ public class ChatboxTextInput extends ChatboxInput implements KeyListener, Mouse
 		return this;
 	}
 
-	public ChatboxTextInput cursorAt(int index)
+	public void cursorAt(int index)
 	{
-		return cursorAt(index, index);
+		cursorAt(index, index);
 	}
 
-	public ChatboxTextInput cursorAt(int indexA, int indexB)
+	public void cursorAt(int indexA, int indexB)
 	{
 		if (indexA < 0)
 		{
@@ -210,7 +208,6 @@ public class ChatboxTextInput extends ChatboxInput implements KeyListener, Mouse
 			clientThread.invoke(this::update);
 		}
 
-		return this;
 	}
 
 	public String getValue()
@@ -254,10 +251,9 @@ public class ChatboxTextInput extends ChatboxInput implements KeyListener, Mouse
 		return this;
 	}
 
-	public ChatboxTextInput onChanged(Consumer<String> onChanged)
+	public void onChanged(Consumer<String> onChanged)
 	{
 		this.onChanged = onChanged;
-		return this;
 	}
 
 	public ChatboxTextInput fontID(int fontID)
@@ -288,281 +284,255 @@ public class ChatboxTextInput extends ChatboxInput implements KeyListener, Mouse
 		buildEdit(0, 50, container.getWidth(), 0);
 	}
 
-	protected void buildEdit(int x, int y, int w, int h)
-	{
-		final List<Line> editLines = new ArrayList<>();
+	protected void buildEdit(int x, int y, int width, int lineHeight) {
+		Widget containerWidget = chatboxPanelManager.getContainerWidget();
 
-		Widget container = chatboxPanelManager.getContainerWidget();
+		final Widget cursorWidget = containerWidget.createChild(-1, WidgetType.RECTANGLE);
+		cursorWidget.setTextColor(0xFFFFFF);
+		cursorWidget.setHasListener(true);
+		cursorWidget.setFilled(true);
+		cursorWidget.setFontId(fontID);
 
-		final Widget cursor = container.createChild(-1, WidgetType.RECTANGLE);
-		long start = System.currentTimeMillis();
-		cursor.setOnTimerListener((JavaScriptCallback) ev ->
-		{
-			boolean on = (System.currentTimeMillis() - start) % CURSOR_FLASH_RATE_MILLIS > (CURSOR_FLASH_RATE_MILLIS / 2);
-			cursor.setOpacity(on ? 255 : 0);
-		});
-		cursor.setTextColor(0xFFFFFF);
-		cursor.setHasListener(true);
-		cursor.setFilled(true);
-		cursor.setFontId(fontID);
-
-		FontTypeFace font = cursor.getFont();
-		if (h <= 0)
-		{
-			h = font.getBaseline();
+		FontTypeFace fontTypeFace = cursorWidget.getFont();
+		if (lineHeight <= 0) {
+			lineHeight = fontTypeFace.getBaseline();
 		}
 
-		final int oy = y;
-		final int ox = x;
-		final int oh = h;
-
+		List<Line> editLines = new ArrayList<>();
 		int breakIndex = -1;
-		final StringBuilder sb = new StringBuilder();
-		for (int i = 0; i < value.length(); i++)
-		{
-			int count = i - sb.length();
-			final String c = value.charAt(i) + "";
-			sb.append(c);
-			if (BREAK_MATCHER.matcher(c).matches())
-			{
-				breakIndex = sb.length();
+		StringBuilder lineBuilder = new StringBuilder();
+		for (int i = 0; i < value.length(); i++) {
+			int count = i - lineBuilder.length();
+			final String character = value.charAt(i) + "";
+			lineBuilder.append(character);
+			if (BREAK_MATCHER.matcher(character).matches()) {
+				breakIndex = lineBuilder.length();
 			}
 
-			if (i == value.length() - 1)
-			{
-				Line line = new Line(count, count + sb.length() - 1, sb.toString());
-				editLines.add(line);
-				break;
-			}
+			if (i == value.length() - 1 || fontTypeFace.getTextWidth(lineBuilder.toString() + value.charAt(i + 1)) >= width) {
+				if (editLines.size() < this.lines - 1 || this.lines == 0) {
+					if (breakIndex > 1) {
+						String str = lineBuilder.substring(0, breakIndex);
+						Line line = new Line(count, count + str.length() - 1, str);
+						editLines.add(line);
 
-			if (font.getTextWidth(sb.toString() + value.charAt(i + 1)) < w)
-			{
-				continue;
-			}
-
-			if (editLines.size() < this.lines - 1 || this.lines == 0)
-			{
-				if (breakIndex > 1)
-				{
-					String str = sb.substring(0, breakIndex);
-					Line line = new Line(count, count + str.length() - 1, str);
-					editLines.add(line);
-
-					sb.replace(0, breakIndex, "");
-					breakIndex = -1;
-					continue;
+						lineBuilder.replace(0, breakIndex, "");
+						breakIndex = -1;
+					} else {
+						Line line = new Line(count, count + lineBuilder.length() - 1, lineBuilder.toString());
+						editLines.add(line);
+						lineBuilder.replace(0, lineBuilder.length(), "");
+					}
+				} else {
+					break;
 				}
-
-				Line line = new Line(count, count + sb.length() - 1, sb.toString());
-				editLines.add(line);
-				sb.replace(0, sb.length(), "");
 			}
 		}
 
-		Rectangle bounds = new Rectangle(container.getCanvasLocation().getX() + container.getWidth(), y, 0, editLines.size() * oh);
-		for (int i = 0; i < editLines.size() || i == 0; i++)
-		{
-			final Line line = editLines.size() > 0 ? editLines.get(i) : new Line(0, 0, "");
+		Rectangle bounds = new Rectangle(containerWidget.getCanvasLocation().getX() + containerWidget.getWidth(), y, 0, editLines.size() * lineHeight);
+        for (Line line : editLines) {
 			final String text = line.text;
-			final int len = text.length();
+			final int textLength = text.length();
 
-			String lt = Text.escapeJagex(text);
-			String mt = "";
-			String rt = "";
+			String leftText = Text.escapeJagex(text);
+			String middleText = "";
+			String rightText = "";
 
 			final boolean isStartLine = cursorOnLine(cursorStart, line.start, line.end)
-				|| (cursorOnLine(cursorStart, line.start, line.end + 1) && i == editLines.size() - 1);
+					|| (cursorOnLine(cursorStart, line.start, line.end + 1) && line == editLines.get(editLines.size() - 1));
 
 			final boolean isEndLine = cursorOnLine(cursorEnd, line.start, line.end);
 
-			if (isStartLine || isEndLine || (cursorEnd > line.end && cursorStart < line.start))
-			{
-				final int cIdx = Ints.constrainToRange(cursorStart - line.start, 0, len);
-				final int ceIdx = Ints.constrainToRange(cursorEnd - line.start, 0, len);
+			if (isStartLine || isEndLine || (cursorEnd > line.end && cursorStart < line.start)) {
+				final int cursorIndex = Ints.constrainToRange(cursorStart - line.start, 0, textLength);
+				final int cursorEndIndex = Ints.constrainToRange(cursorEnd - line.start, 0, textLength);
 
-				lt = Text.escapeJagex(text.substring(0, cIdx));
-				mt = Text.escapeJagex(text.substring(cIdx, ceIdx));
-				rt = Text.escapeJagex(text.substring(ceIdx));
+				leftText = Text.escapeJagex(text.substring(0, cursorIndex));
+				middleText = Text.escapeJagex(text.substring(cursorIndex, cursorEndIndex));
+				rightText = Text.escapeJagex(text.substring(cursorEndIndex));
 			}
 
-			final int ltw = font.getTextWidth(lt);
-			final int mtw = font.getTextWidth(mt);
-			final int rtw = font.getTextWidth(rt);
-			final int fullWidth = ltw + mtw + rtw;
+			final int leftTextWidth = fontTypeFace.getTextWidth(leftText);
+			final int middleTextWidth = fontTypeFace.getTextWidth(middleText);
+			final int rightTextWidth = fontTypeFace.getTextWidth(rightText);
+			final int fullWidth = leftTextWidth + middleTextWidth + rightTextWidth;
 
-			int ltx = ox;
-			if (w > 0)
-			{
-				ltx += (w - fullWidth) / 2;
+			int leftTextX = x;
+			if (width > 0) {
+				leftTextX += (width - fullWidth) / 2;
 			}
 
-			final int mtx = ltx + ltw;
-			final int rtx = mtx + mtw;
+			final int middleTextX = leftTextX + leftTextWidth;
+			final int rightTextX = middleTextX + middleTextWidth;
 
-			if (ltx < bounds.x)
-			{
-				bounds.setLocation(ltx, bounds.y);
+			if (leftTextX < bounds.x) {
+				bounds.setLocation(leftTextX, bounds.y);
 			}
 
-			if (fullWidth > bounds.width)
-			{
+			if (fullWidth > bounds.width) {
 				bounds.setSize(fullWidth, bounds.height);
 			}
 
-			if (editLines.size() == 0 || isStartLine)
-			{
-				cursor.setOriginalX(mtx - 1);
-				cursor.setOriginalY(y);
-				cursor.setOriginalWidth(2);
-				cursor.setOriginalHeight(h);
-				cursor.revalidate();
+			if (editLines.isEmpty() || isStartLine) {
+				cursorWidget.setOriginalX(middleTextX - 1);
+				cursorWidget.setOriginalY(y);
+				cursorWidget.setOriginalWidth(2);
+				cursorWidget.setOriginalHeight(lineHeight);
+				cursorWidget.revalidate();
 			}
 
-			if (!Strings.isNullOrEmpty(lt))
-			{
-				final Widget leftText = container.createChild(-1, WidgetType.TEXT);
-				leftText.setFontId(fontID);
-				leftText.setText(lt);
-				leftText.setOriginalX(ltx);
-				leftText.setOriginalY(y);
-				leftText.setOriginalWidth(ltw);
-				leftText.setOriginalHeight(h);
-				leftText.revalidate();
+			if (!leftText.isEmpty()) {
+				Widget leftTextWidget = null;
+				for (Widget w : Objects.requireNonNull(containerWidget.getChildren())) {
+					if (w.getType() == WidgetType.TEXT && w.getText().equals(leftText)) {
+						leftTextWidget = w;
+						break;
+					}
+				}
+				if (leftTextWidget == null) {
+					leftTextWidget = containerWidget.createChild(-1, WidgetType.TEXT);
+					leftTextWidget.setFontId(fontID);
+					leftTextWidget.setOriginalHeight(lineHeight);
+					leftTextWidget.setTextColor(0xFFFFFF);
+				}
+				leftTextWidget.setText(leftText);
+				leftTextWidget.setOriginalX(leftTextX);
+				leftTextWidget.setOriginalY(y);
+				leftTextWidget.setOriginalWidth(leftTextWidth);
+				leftTextWidget.revalidate();
 			}
 
-			if (!Strings.isNullOrEmpty(mt))
-			{
-				final Widget background = container.createChild(-1, WidgetType.RECTANGLE);
-				background.setTextColor(0x113399);
-				background.setFilled(true);
-				background.setOriginalX(mtx - 1);
-				background.setOriginalY(y);
-				background.setOriginalWidth(2 + mtw);
-				background.setOriginalHeight(h);
-				background.revalidate();
-
-				final Widget middleText = container.createChild(-1, WidgetType.TEXT);
-				middleText.setText(mt);
-				middleText.setFontId(fontID);
-				middleText.setOriginalX(mtx);
-				middleText.setOriginalY(y);
-				middleText.setOriginalWidth(mtw);
-				middleText.setOriginalHeight(h);
-				middleText.setTextColor(0xFFFFFF);
-				middleText.revalidate();
+			if (!middleText.isEmpty()) {
+				Widget middleTextWidget = null;
+				for (Widget w : Objects.requireNonNull(containerWidget.getChildren())) {
+					if (w.getType() == WidgetType.TEXT && w.getText().equals(middleText)) {
+						middleTextWidget = w;
+						break;
+					}
+				}
+				if (middleTextWidget == null) {
+					middleTextWidget = containerWidget.createChild(-1, WidgetType.TEXT);
+					middleTextWidget.setFontId(fontID);
+					middleTextWidget.setOriginalHeight(lineHeight);
+					middleTextWidget.setTextColor(0xFFFFFF);
+				}
+				middleTextWidget.setText(middleText);
+				middleTextWidget.setOriginalX(middleTextX);
+				middleTextWidget.setOriginalY(y);
+				middleTextWidget.setOriginalWidth(middleTextWidth);
+				middleTextWidget.revalidate();
 			}
 
-			if (!Strings.isNullOrEmpty(rt))
-			{
-				final Widget rightText = container.createChild(-1, WidgetType.TEXT);
-				rightText.setText(rt);
-				rightText.setFontId(fontID);
-				rightText.setOriginalX(rtx);
-				rightText.setOriginalY(y);
-				rightText.setOriginalWidth(rtw);
-				rightText.setOriginalHeight(h);
-				rightText.revalidate();
+			if (!rightText.isEmpty()) {
+				Widget rightTextWidget = null;
+				for (Widget w : Objects.requireNonNull(containerWidget.getChildren())) {
+					if (w.getType() == WidgetType.TEXT && w.getText().equals(rightText)) {
+						rightTextWidget = w;
+						break;
+					}
+				}
+				if (rightTextWidget == null) {
+					rightTextWidget = containerWidget.createChild(-1, WidgetType.TEXT);
+					rightTextWidget.setFontId(fontID);
+					rightTextWidget.setOriginalHeight(lineHeight);
+					rightTextWidget.setTextColor(0xFFFFFF);
+				}
+				rightTextWidget.setText(rightText);
+				rightTextWidget.setOriginalX(rightTextX);
+				rightTextWidget.setOriginalY(y);
+				rightTextWidget.setOriginalWidth(rightTextWidth);
+				rightTextWidget.revalidate();
 			}
 
-			y += h;
+			y += lineHeight;
 		}
 
-		net.runelite.api.Point ccl = container.getCanvasLocation();
+		net.runelite.api.Point containerCanvasLocation = containerWidget.getCanvasLocation();
+		isInBounds = ev -> bounds.contains(new Point(ev.getX() - containerCanvasLocation.getX(), ev.getY() - containerCanvasLocation.getY()));
 
-		isInBounds = ev -> bounds.contains(new Point(ev.getX() - ccl.getX(), ev.getY() - ccl.getY()));
-		getPointCharOffset = p ->
-		{
-			if (bounds.width <= 0)
-			{
+		int finalY = y;
+		int finalLineHeight = lineHeight;
+		getPointCharOffset = point -> {
+			if (bounds.width <= 0) {
 				return 0;
 			}
 
-			int cx = p.x - ccl.getX() - ox;
-			int cy = p.y - ccl.getY() - oy;
+			int cx = point.x - containerCanvasLocation.getX() - x;
+			int cy = point.y - containerCanvasLocation.getY() - finalY;
 
-			int currentLine = Ints.constrainToRange(cy / oh, 0, editLines.size() - 1);
+			int currentLine = Ints.constrainToRange(cy / finalLineHeight, 0, editLines.size() - 1);
 
 			final Line line = editLines.get(currentLine);
-			final String tsValue = line.text;
-			int charIndex = tsValue.length();
-			int fullWidth = font.getTextWidth(tsValue);
+			final String lineText = line.text;
+			int charIndex = lineText.length();
+			int fullWidth = fontTypeFace.getTextWidth(lineText);
 
-			int tx = ox;
-			if (w > 0)
-			{
-				tx += (w - fullWidth) / 2;
+			int tx = x;
+			if (width > 0) {
+				tx += (width - fullWidth) / 2;
 			}
 			cx -= tx;
 
-			// `i` is used to track max execution time incase there is a font with ligature width data that causes this to fail
-			for (int i = tsValue.length(); i >= 0 && charIndex >= 0 && charIndex <= tsValue.length(); i--)
-			{
-				int lcx = charIndex > 0 ? font.getTextWidth(Text.escapeJagex(tsValue.substring(0, charIndex - 1))) : 0;
-				int mcx = font.getTextWidth(Text.escapeJagex(tsValue.substring(0, charIndex)));
-				int rcx = charIndex + 1 <= tsValue.length() ? font.getTextWidth(Text.escapeJagex(tsValue.substring(0, charIndex + 1))) : mcx;
+			for (int i = lineText.length(); i >= 0 && charIndex >= 0 && charIndex <= lineText.length(); i--) {
+				int leftCharWidth = charIndex > 0 ? fontTypeFace.getTextWidth(Text.escapeJagex(lineText.substring(0, charIndex - 1))) : 0;
+				int middleCharWidth = fontTypeFace.getTextWidth(Text.escapeJagex(lineText.substring(0, charIndex)));
+				int rightCharWidth = charIndex + 1 <= lineText.length() ? fontTypeFace.getTextWidth(Text.escapeJagex(lineText.substring(0, charIndex + 1))) : middleCharWidth;
 
-				int leftBound = (lcx + mcx) / 2;
-				int rightBound = (mcx + rcx) / 2;
+				int leftBound = (leftCharWidth + middleCharWidth) / 2;
+				int rightBound = (middleCharWidth + rightCharWidth) / 2;
 
-				if (cx < leftBound)
-				{
+				if (cx < leftBound) {
 					charIndex--;
 					continue;
 				}
-				if (cx > rightBound)
-				{
+				if (cx > rightBound) {
 					charIndex++;
 					continue;
 				}
 				break;
 			}
 
-			charIndex = Ints.constrainToRange(charIndex, 0, tsValue.length());
+			charIndex = Ints.constrainToRange(charIndex, 0, lineText.length());
 			return line.start + charIndex;
 		};
 
-		getLineOffset = code ->
-		{
-			if (editLines.size() < 2)
-			{
+		int finalLineHeight1 = lineHeight;
+		getLineOffset = code -> {
+			if (editLines.size() < 2) {
 				return cursorStart;
 			}
 
 			int currentLine = -1;
-			for (int i = 0; i < editLines.size(); i++)
-			{
-				Line l = editLines.get(i);
-				if (cursorOnLine(cursorStart, l.start, l.end)
-					|| (cursorOnLine(cursorStart, l.start, l.end + 1) && i == editLines.size() - 1))
-				{
+			for (int i = 0; i < editLines.size(); i++) {
+				Line line = editLines.get(i);
+				if (cursorOnLine(cursorStart, line.start, line.end)
+						|| (cursorOnLine(cursorStart, line.start, line.end + 1) && i == editLines.size() - 1)) {
 					currentLine = i;
 					break;
 				}
 			}
 
 			if (currentLine == -1
-				|| (code == KeyEvent.VK_UP && currentLine == 0)
-				|| (code == KeyEvent.VK_DOWN && currentLine == editLines.size() - 1))
-			{
+					|| (code == KeyEvent.VK_UP && currentLine == 0)
+					|| (code == KeyEvent.VK_DOWN && currentLine == editLines.size() - 1)) {
 				return cursorStart;
 			}
 
 			final Line line = editLines.get(currentLine);
 			final int direction = code == KeyEvent.VK_UP ? -1 : 1;
-			final Point dest = new Point(cursor.getCanvasLocation().getX(), cursor.getCanvasLocation().getY() + (direction * oh));
-			final int charOffset = getPointCharOffset.applyAsInt(dest);
+			final Point destinationPoint = new Point(cursorWidget.getCanvasLocation().getX(), cursorWidget.getCanvasLocation().getY() + (direction * finalLineHeight1));
+			final int charOffset = getPointCharOffset.applyAsInt(destinationPoint);
 
-			// Place cursor on right line if whitespace keep it on the same line or skip a line
 			final Line nextLine = editLines.get(currentLine + direction);
 			if ((direction == -1 && charOffset >= line.start)
-				|| (direction == 1 && (charOffset > nextLine.end && (currentLine + direction != editLines.size() - 1))))
-			{
+					|| (direction == 1 && (charOffset > nextLine.end && (currentLine + direction != editLines.size() - 1)))) {
 				return nextLine.end;
 			}
 
 			return charOffset;
 		};
 	}
+
 
 	private boolean cursorOnLine(final int cursor, final int start, final int end)
 	{

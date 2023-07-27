@@ -76,6 +76,7 @@ import net.runelite.api.vars.AccountType;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.rs.api.*;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.imageio.ImageIO;
 import java.applet.AppletContext;
@@ -103,6 +104,8 @@ import static com.runescape.scene.SceneGraph.pitchRelaxEnabled;
 
 @Slf4j
 public class Client extends GameEngine implements RSClient {
+
+    private static final Logger log = LoggerFactory.getLogger(Client.class);
 
     public final void init() {
         System.out.println("Init");
@@ -1512,7 +1515,7 @@ public class Client extends GameEngine implements RSClient {
 
         //Draw input
         String textInput = "";
-        if (searchSyntax.length() > 0) {
+        if (!searchSyntax.isEmpty()) {
             textInput = StringUtils.formatText(searchSyntax);
         }
 
@@ -1534,11 +1537,11 @@ public class Client extends GameEngine implements RSClient {
             return;
 
         int lowest_y_off = Integer.MAX_VALUE;
-        for (int i = 0; i < xp_added.length; i++)
-            if (xp_added[i][0] > -1)
-                lowest_y_off = Math.min(lowest_y_off, xp_added[i][2]);
+        for (int[] ints : xp_added)
+            if (ints[0] > -1)
+                lowest_y_off = Math.min(lowest_y_off, ints[2]);
 
-        if (Configuration.mergeExpDrops && lowest_y_off != Integer.MAX_VALUE && lowest_y_off <= 0) {
+        if (Configuration.mergeExpDrops && lowest_y_off <= 0) {
             for (int i = 0; i < xp_added.length; i++) {
                 if (xp_added[i][2] != lowest_y_off)
                     continue;
@@ -1555,31 +1558,43 @@ public class Client extends GameEngine implements RSClient {
             while (go_on) {
                 go_on = false;
 
+//                for (int i = 0; i < xp_added.length; i++) {
+//                    if (xp_added[i][0] == -1 || list.contains(new Integer(i)))
+//                        continue;
+//
+//                    if (xp_added[i][2] < y) {
+//                        xp_added[i][2] = y;
+//                        y += font_height;
+//                        go_on = true;
+//                        list.add(new Integer(i));
+//                    }
+//                }
+
                 for (int i = 0; i < xp_added.length; i++) {
-                    if (xp_added[i][0] == -1 || list.contains(new Integer(i)))
+                    if (xp_added[i][0] == -1 || list.contains(i)) // Autoboxing
                         continue;
 
                     if (xp_added[i][2] < y) {
                         xp_added[i][2] = y;
                         y += font_height;
                         go_on = true;
-                        list.add(new Integer(i));
+                        list.add(i); // Autoboxing
                     }
                 }
+
             }
 
-            if (lowest_y_off == Integer.MAX_VALUE || lowest_y_off >= font_height)
-                lowest_y_off = 0;
-            else
-                lowest_y_off = 0;
-
-            for (int i = 0; i < xp_added.length; i++)
+            if (lowest_y_off == Integer.MAX_VALUE || lowest_y_off >= font_height) { lowest_y_off = 0; }
+            else { lowest_y_off = 0; }
+            for (int i = 0; i < xp_added.length; i++) {
                 if (xp_added[i][0] == -1) {
                     xp_added[i][0] = (1 << skill);
                     xp_added[i][1] = xp;
                     xp_added[i][2] = lowest_y_off;
                     return;
                 }
+            }
+
         }
     }
 

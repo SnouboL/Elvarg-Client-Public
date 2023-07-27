@@ -38,4 +38,13 @@ public class ResizeableChanged
 	 * Whether the game is in resizable mode.
 	 */
 	private boolean isResized;
+
+	public void setResized(boolean resized)
+	{
+		this.isResized = resized;
+	}
+
+	public boolean isResized() {
+		return isResized;
+	}
 }

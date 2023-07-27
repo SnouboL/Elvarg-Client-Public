@@ -34,11 +34,12 @@ import javax.swing.*;
 import java.applet.Applet;
 import java.io.IOException;
 import java.util.function.Supplier;
+import java.util.logging.Logger;
 
 @Slf4j
-@SuppressWarnings({"deprecation", "removal"})
 public class ClientLoader implements Supplier<Applet>
 {
+	private final Logger log = Logger.getLogger(Logger.GLOBAL_LOGGER_NAME);
 	private Object client;
 
 	@Override
@@ -83,7 +84,7 @@ public class ClientLoader implements Supplier<Applet>
 		}
 		catch (IOException | ClassNotFoundException | InstantiationException | IllegalAccessException | SecurityException e)
 		{
-			log.error("Error loading RS!", e);
+			log.finest("Error loading Runescape with the error: " + e);
 
 			SwingUtilities.invokeLater(() -> FatalErrorDialog.showNetErrorWindow("loading the client", e));
 			return e;
