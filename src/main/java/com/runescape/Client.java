@@ -102,7 +102,6 @@ import java.util.zip.DeflaterOutputStream;
 
 import static com.runescape.scene.SceneGraph.pitchRelaxEnabled;
 
-@Slf4j
 public class Client extends GameEngine implements RSClient {
 
     private static final Logger log = LoggerFactory.getLogger(Client.class);

@@ -36,7 +36,7 @@ import java.io.IOException;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 
-@Slf4j
+
 public class ClientLoader implements Supplier<Applet>
 {
 	private final Logger log = Logger.getLogger(Logger.GLOBAL_LOGGER_NAME);
