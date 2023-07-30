@@ -84,6 +84,9 @@ import java.nio.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.jocl.CL.*;
 import org.lwjgl.opengl.GL;
@@ -102,6 +105,9 @@ import org.lwjgl.system.Callback;
 @Slf4j
 public class HdPlugin extends Plugin implements DrawCallbacks
 {
+
+	private ExecutorService executorService = Executors.newSingleThreadExecutor();
+
 	// This is the maximum number of triangles the compute shaders support
 	public static final int MAX_TRIANGLE = 6144;
 	public static final int SMALL_TRIANGLE_COUNT = 512;
@@ -1517,12 +1523,12 @@ public class HdPlugin extends Plugin implements DrawCallbacks
 		GL43C.glBindBuffer(GL43C.GL_PIXEL_UNPACK_BUFFER, 0);
 		GL43C.glBindTexture(GL43C.GL_TEXTURE_2D, 0);
 	}
+	long currentTimeMillis = System.currentTimeMillis();
+	private void drawFrame(int overlayColor) {
 
-	private void drawFrame(int overlayColor)
-	{
 		// reset the plugin if the last frame took >1min to draw
 		// why? because the user's computer was probably suspended and the buffers are no longer valid
-		if (System.currentTimeMillis() - lastFrameTime > 60000) {
+		if (currentTimeMillis - lastFrameTime > 60000) {
 			log.debug("resetting the plugin after probable OS suspend");
 			shutDown();
 			startUp();
@@ -1530,8 +1536,8 @@ public class HdPlugin extends Plugin implements DrawCallbacks
 		}
 
 		// shader variables for water, lava animations
-		animationCurrent += (System.currentTimeMillis() - lastFrameTime) / 1000f;
-		lastFrameTime = System.currentTimeMillis();
+		animationCurrent += (currentTimeMillis - lastFrameTime) / 1000f;
+		lastFrameTime = currentTimeMillis;
 
 		final int canvasHeight = client.getCanvasHeight();
 		final int canvasWidth = client.getCanvasWidth();
@@ -2123,7 +2129,7 @@ public class HdPlugin extends Plugin implements DrawCallbacks
 		uvBuffer.clear();
 		normalBuffer.clear();
 
-		generateHDSceneData();
+		generateHDSceneDataAsync();
 
 		sceneUploader.upload(client.getScene(), vertexBuffer, uvBuffer, normalBuffer);
 
@@ -2146,30 +2152,68 @@ public class HdPlugin extends Plugin implements DrawCallbacks
 		normalBuffer.clear();
 	}
 
-	void generateHDSceneData()
+	public void generateHDSceneDataAsync()
 	{
-		environmentManager.loadSceneEnvironments();
-		lightManager.loadSceneLights();
+		Future<?> environmentFuture = executorService.submit(() -> {
+			environmentManager.loadSceneEnvironmentsAsync();
+		});
+
+		Future<?> lightManagerFuture = executorService.submit(() -> {
+			lightManager.loadSceneLights();
+		});
 
 		long procGenTimer = System.currentTimeMillis();
-		long timerCalculateTerrainNormals, timerGenerateTerrainData, timerGenerateUnderwaterTerrain;
+		final long[] timerCalculateTerrainNormals = new long[1];
+		final long[] timerGenerateTerrainData = new long[1];
+		final long[] timerGenerateUnderwaterTerrain = new long[1];
 
-		long startTime = System.currentTimeMillis();
-		proceduralGenerator.generateUnderwaterTerrain(client.getScene());
-		timerGenerateUnderwaterTerrain = (int)(System.currentTimeMillis() - startTime);
-		startTime = System.currentTimeMillis();
-		proceduralGenerator.calculateTerrainNormals(client.getScene());
-		timerCalculateTerrainNormals = (int)(System.currentTimeMillis() - startTime);
-		startTime = System.currentTimeMillis();
-		proceduralGenerator.generateTerrainData(client.getScene());
-		timerGenerateTerrainData = (int)(System.currentTimeMillis() - startTime);
+		// Execute the generateUnderwaterTerrain in a separate thread
+		Future<?> underwaterTerrainFuture = executorService.submit(() -> {
+			long startTime = System.currentTimeMillis();
+			proceduralGenerator.generateUnderwaterTerrain(client.getScene());
+			timerGenerateUnderwaterTerrain[0] = (int) (System.currentTimeMillis() - startTime);
+			log.debug("-- generateUnderwaterTerrain: {}ms", timerGenerateUnderwaterTerrain[0]);
+		});
+
+		// Execute the calculateTerrainNormals in a separate thread
+		final Future<?>[] calculateNormalsFuture = {executorService.submit(() -> {
+			long startTime = System.currentTimeMillis();
+			proceduralGenerator.calculateTerrainNormals(client.getScene());
+			timerCalculateTerrainNormals[0] = (int) (System.currentTimeMillis() - startTime);
+			log.debug("-- calculateTerrainNormals: {}ms", timerCalculateTerrainNormals[0]);
+		})};
+
+		// Execute the generateTerrainData in a separate thread
+		Future<?> generateTerrainDataFuture = executorService.submit(() -> {
+			long startTime = System.currentTimeMillis();
+			proceduralGenerator.generateTerrainData(client.getScene());
+			timerGenerateTerrainData[0] = (int) (System.currentTimeMillis() - startTime);
+			log.debug("-- generateTerrainData: {}ms", timerGenerateTerrainData[0]);
+		});
+
+		// Wait for environment and light management tasks to complete before proceeding with terrain generation tasks
+		try {
+			environmentFuture.get();
+			lightManagerFuture.get();
+		} catch (Exception e) {
+			log.warn("Error occurred while waiting for environment and light management tasks to complete: {}", e.getMessage());
+		}
+
+		// Wait for all terrain generation tasks to complete before logging the total time
+		try {
+			underwaterTerrainFuture.get();
+			calculateNormalsFuture[0].get();
+			generateTerrainDataFuture.get();
+		} catch (Exception e) {
+			log.warn("Error occurred while waiting for terrain generation tasks to complete: {}", e.getMessage());
+		}
 
 		log.debug("procedural data generation took {}ms to complete", (System.currentTimeMillis() - procGenTimer));
-		log.debug("-- calculateTerrainNormals: {}ms", timerCalculateTerrainNormals);
-		log.debug("-- generateTerrainData: {}ms", timerGenerateTerrainData);
-		log.debug("-- generateUnderwaterTerrain: {}ms", timerGenerateUnderwaterTerrain);
 	}
-
+	public void shutdownExecutorService()
+	{
+		executorService.shutdown();
+	}
 	private boolean skyboxColorChanged = false;
 
 	@Subscribe(priority = -1)

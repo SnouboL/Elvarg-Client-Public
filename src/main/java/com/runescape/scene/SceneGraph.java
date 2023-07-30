@@ -29,7 +29,7 @@ import static net.runelite.api.Constants.*;
 
 public final class SceneGraph implements RSScene {
 
-    public static int viewDistance = 9;
+    public static int viewDistance = 90;
 
     public static boolean pitchRelaxEnabled;
     public static boolean hdMinimapEnabled = false;
@@ -88,7 +88,7 @@ public final class SceneGraph implements RSScene {
 
     }
 
-    public void method275(int zLoc) {
+    public void initializeTilesAtLevel(int zLoc) {
         minLevel = zLoc;
         for (int xLoc = 0; xLoc < maxX; xLoc++) {
             for (int yLoc = 0; yLoc < maxZ; yLoc++)

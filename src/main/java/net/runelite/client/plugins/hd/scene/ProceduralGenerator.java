@@ -29,6 +29,8 @@ import com.google.common.primitives.Ints;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.IntStream;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -717,23 +719,17 @@ public class ProceduralGenerator
 	 *
 	 * @param scene
 	 */
-	public void calculateTerrainNormals(Scene scene)
-	{
-		vertexTerrainNormals = new HashMap<>();
+	public void calculateTerrainNormals(Scene scene) {
+		vertexTerrainNormals = new ConcurrentHashMap<>();
 		Tile[][][] tiles = scene.getTiles();
 
-		for (int tileZ = 0; tileZ < tiles.length; tileZ++)
-		{
-			for (int tileX = 0; tileX < tiles[tileZ].length; tileX++)
-			{
-				for (int tileY = 0; tileY < tiles[tileZ][tileX].length; tileY++)
-				{
-					if (tiles[tileZ][tileX][tileY] != null)
-					{
+		IntStream.range(0, tiles.length).parallel().forEach(tileZ -> {
+			for (int tileX = 0; tileX < tiles[tileZ].length; tileX++) {
+				for (int tileY = 0; tileY < tiles[tileZ][tileX].length; tileY++) {
+					if (tiles[tileZ][tileX][tileY] != null) {
 						boolean isBridge = false;
 
-						if (tiles[tileZ][tileX][tileY].getBridge() != null)
-						{
+						if (tiles[tileZ][tileX][tileY].getBridge() != null) {
 							calculateNormalsForTile(tiles[tileZ][tileX][tileY].getBridge(), false);
 							isBridge = true;
 						}
@@ -741,9 +737,8 @@ public class ProceduralGenerator
 					}
 				}
 			}
-		}
+		});
 	}
-
 	/**
 	 * Calculates vertex normals for a given Tile,
 	 * then stores resulting normal data in a HashMap.

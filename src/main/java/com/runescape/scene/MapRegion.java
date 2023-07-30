@@ -1,7 +1,6 @@
 package com.runescape.scene;
 
 import com.runescape.Client;
-import com.runescape.cache.ResourceProvider;
 import com.runescape.cache.def.FloorDefinition;
 import com.runescape.cache.def.ObjectDefinition;
 import com.runescape.draw.Rasterizer3D;
@@ -69,7 +68,17 @@ public final class MapRegion {
     }
 
     public final void createRegionScene(CollisionMap maps[], SceneGraph scene) {
+
+
         try {
+
+            // Cache frequently accessed data
+            boolean isHdMinimapEnabled = Client.instance.isHdMinimapEnabled();
+            int mapLight = isHdMinimapEnabled ? 52 : 96;
+            char diffusion = '\u0300';
+            byte lightX = -50;
+            byte lightY = -10;
+            byte lightZ = -50;
 
             for (int z = 0; z < 4; z++) {
                 for (int x = 0; x < 104; x++) {
@@ -85,14 +94,11 @@ public final class MapRegion {
                 }
 
             }
-            int mapLight = Client.instance.isHdMinimapEnabled() ? 52 : 96;
-            for (int z = 0; z < 4; z++) {
-                byte shading[][] = this.shading[z];
 
-                char diffusion = '\u0300';
-                byte lightX = -50;
-                byte lightY = -10;
-                byte lightZ = -50;
+            for (int z = 0; z < 4; z++) {
+                byte[][] shading = this.shading[z];
+
+
                 int light = (int) Math.sqrt(lightX * lightX + lightY * lightY + lightZ * lightZ);
                 int l3 = diffusion * light >> 8;
                 for (int j4 = 1; j4 < regionSizeY - 1; j4++) {
@@ -1356,40 +1362,53 @@ public final class MapRegion {
         return bool;
     }
 
-    public final void method190(int i, CollisionMap aclass11[], int j, SceneGraph worldController, byte abyte0[]) {
-        label0: {
-            Buffer stream = new Buffer(abyte0);
-            int l = -1;
-            do {
-                int i1 = stream.readUSmart();
-                if (i1 == 0)
-                    break label0;
-                l += i1;
-                int j1 = 0;
-                do {
-                    int k1 = stream.readUSmart();
-                    if (k1 == 0)
+    public final void renderObjectsInArea(int baseX, CollisionMap[] collisionMaps, int baseY, SceneGraph worldController, byte[] objectData) {
+        try {
+            Buffer stream = new Buffer(objectData);
+            int localObjId = -1;
+
+            // Loop through the object data
+            while (true) {
+                int incrObjId = stream.readUSmart();
+                if (incrObjId == 0)
+                    break;
+                localObjId += incrObjId;
+                int localTileIndex = 0;
+
+                // Loop through the objects within the area
+                while (true) {
+                    int incrTileIndex = stream.readUSmart();
+                    if (incrTileIndex == 0)
                         break;
-                    j1 += k1 - 1;
-                    int l1 = j1 & 0x3f;
-                    int i2 = j1 >> 6 & 0x3f;
-                    int j2 = j1 >> 12;
-                    int k2 = stream.readUnsignedByte();
-                    int l2 = k2 >> 2;
-                    int i3 = k2 & 3;
-                    int j3 = i2 + i;
-                    int k3 = l1 + j;
-                    if (j3 > 0 && k3 > 0 && j3 < 103 && k3 < 103 && j2 >= 0 && j2 < 4) {
-                        int l3 = j2;
-                        if ((tileFlags[1][j3][k3] & 2) == 2)
-                            l3--;
-                        CollisionMap class11 = null;
-                        if (l3 >= 0)
-                            class11 = aclass11[l3];
-                        renderObject(k3, worldController, class11, l2, j2, j3, l, i3);
+                    localTileIndex += incrTileIndex - 1;
+                    int localTileY = localTileIndex & 0x3F;
+                    int localTileX = localTileIndex >> 6 & 0x3F;
+                    int heightLevel = localTileIndex >> 12;
+                    int objectInfo = stream.readUnsignedByte();
+                    int objectId = objectInfo >> 2;
+                    int objectRotation = objectInfo & 3;
+                    int globalTileX = localTileX + baseX;
+                    int globalTileY = localTileY + baseY;
+
+                    // Check if the object is within the valid region and height level
+                    if (globalTileX > 0 && globalTileY > 0 && globalTileX < 103 && globalTileY < 103 && heightLevel >= 0 && heightLevel < 4) {
+                        int adjustedHeight = heightLevel;
+                        int tileFlag = tileFlags[1][globalTileX][globalTileY];
+                        if ((tileFlag & 2) == 2)
+                            adjustedHeight--;
+
+                        // Avoid unnecessary array access by storing the CollisionMap in a local variable
+                        CollisionMap collisionMap = adjustedHeight >= 0 ? collisionMaps[adjustedHeight] : null;
+
+                        // Call the renderObject method to handle rendering
+                        renderObject(globalTileY, worldController, collisionMap, objectId, heightLevel, globalTileX, localObjId, objectRotation);
                     }
-                } while (true);
-            } while (true);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
+
+
 }

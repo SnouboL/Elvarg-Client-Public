@@ -79,7 +79,6 @@ import net.runelite.client.util.RSTimeUnit;
 public class Hooks implements Callbacks
 {
 	private static final long CHECK = RSTimeUnit.GAME_TICKS.getDuration().toNanos(); // ns - how often to run checks
-
 	private static final GameTick GAME_TICK = new GameTick();
 	private static final BeforeRender BEFORE_RENDER = new BeforeRender();
 
@@ -100,14 +99,11 @@ public class Hooks implements Callbacks
 	private Dimension lastStretchedDimensions;
 	private VolatileImage stretchedImage;
 	private Graphics2D stretchedGraphics;
-
 	private long lastCheck;
 	private boolean ignoreNextNpcUpdate;
 	private boolean shouldProcessGameTick;
-
 	private static MainBufferProvider lastMainBufferProvider;
 	private static Graphics2D lastGraphics;
-
 	/**
 	 * Get the Graphics2D for the MainBufferProvider image
 	 * This caches the Graphics2D instance so it can be reused
@@ -132,19 +128,19 @@ public class Hooks implements Callbacks
 
 	@Inject
 	private Hooks(
-		Client client,
-		OverlayRenderer renderer,
-		EventBus eventBus,
-		DeferredEventBus deferredEventBus,
-		Scheduler scheduler,
-		InfoBoxManager infoBoxManager,
-		ChatMessageManager chatMessageManager,
-		MouseManager mouseManager,
-		KeyManager keyManager,
-		ClientThread clientThread,
-		DrawManager drawManager,
-		Notifier notifier,
-		ClientUI clientUi
+			Client client,
+			OverlayRenderer renderer,
+			EventBus eventBus,
+			DeferredEventBus deferredEventBus,
+			Scheduler scheduler,
+			InfoBoxManager infoBoxManager,
+			ChatMessageManager chatMessageManager,
+			MouseManager mouseManager,
+			KeyManager keyManager,
+			ClientThread clientThread,
+			DrawManager drawManager,
+			Notifier notifier,
+			ClientUI clientUi
 	)
 	{
 		this.client = client;
@@ -174,18 +170,14 @@ public class Hooks implements Callbacks
 	{
 		deferredEventBus.post(event);
 	}
-
 	@Override
 	public void tick()
 	{
 		if (shouldProcessGameTick)
 		{
 			shouldProcessGameTick = false;
-
 			deferredEventBus.replay();
-
 			eventBus.post(GAME_TICK);
-
 			int tick = client.getTickCount();
 			client.setTickCount(tick + 1);
 		}
@@ -194,28 +186,20 @@ public class Hooks implements Callbacks
 
 		long now = System.nanoTime();
 
-		if (now - lastCheck < CHECK)
+		if (now - lastCheck >= CHECK)
 		{
-			return;
-		}
-
-		lastCheck = now;
-
-		try
-		{
-			// tick pending scheduled tasks
-			scheduler.tick();
-
-			// cull infoboxes
-			infoBoxManager.cull();
-
-			chatMessageManager.process();
-
-			checkWorldMap();
-		}
-		catch (Exception ex)
-		{
-			log.warn("error during main loop tasks", ex);
+			lastCheck = now;
+			try
+			{
+				scheduler.tick();
+				infoBoxManager.cull();
+				chatMessageManager.process();
+				checkWorldMap();
+			}
+			catch (Exception ex)
+			{
+				log.warn("error during main loop tasks", ex);
+			}
 		}
 	}
 

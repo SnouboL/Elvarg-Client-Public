@@ -85,19 +85,26 @@ class SceneUploader
 		++sceneId;
 		offset = 0;
 		uvoffset = 0;
-		vertexBuffer.clear();
-		uvBuffer.clear();
-		normalBuffer.clear();
 
-		for (int z = 0; z < Constants.MAX_Z; ++z)
-		{
-			for (int x = 0; x < Constants.SCENE_SIZE; ++x)
-			{
-				for (int y = 0; y < Constants.SCENE_SIZE; ++y)
-				{
-					Tile tile = scene.getTiles()[z][x][y];
-					if (tile != null)
-					{
+		// Skip clearing if buffers are already empty
+		if (!vertexBuffer.isEmpty()) {
+			vertexBuffer.clear();
+		}
+		if (!uvBuffer.isEmpty()) {
+			uvBuffer.clear();
+		}
+		if (!normalBuffer.isEmpty()) {
+			normalBuffer.clear();
+		}
+
+		Tile[][][] tiles = scene.getTiles(); // Cache the tiles array to minimize getTiles() calls
+
+		// Upload data to GPU buffers
+		for (int z = 0; z < Constants.MAX_Z; ++z) {
+			for (int x = 0; x < Constants.SCENE_SIZE; ++x) {
+				for (int y = 0; y < Constants.SCENE_SIZE; ++y) {
+					Tile tile = tiles[z][x][y];
+					if (tile != null) {
 						upload(tile, vertexBuffer, uvBuffer, normalBuffer);
 					}
 				}
@@ -107,6 +114,7 @@ class SceneUploader
 		stopwatch.stop();
 		log.debug("Scene upload time: {}", stopwatch);
 	}
+
 
 	private void uploadModel(Model model, GpuIntBuffer vertexBuffer, GpuFloatBuffer uvBuffer, GpuFloatBuffer normalBuffer, int tileZ, int tileX, int tileY, ObjectProperties objectProperties, ObjectType objectType)
 	{
@@ -142,34 +150,156 @@ class SceneUploader
 		uvoffset += lengths[1];
 	}
 
-	private void upload(Tile tile, GpuIntBuffer vertexBuffer, GpuFloatBuffer uvBuffer, GpuFloatBuffer normalBuffer)
-	{
-		Tile bridge = tile.getBridge();
-		if (bridge != null)
-		{
-			upload(bridge, vertexBuffer, uvBuffer, normalBuffer);
-		}
+//	private void upload(Tile tile, GpuIntBuffer vertexBuffer, GpuFloatBuffer uvBuffer, GpuFloatBuffer normalBuffer)
+//	{
+//		Tile bridge = tile.getBridge();
+//		if (bridge != null)
+//		{
+//			upload(bridge, vertexBuffer, uvBuffer, normalBuffer);
+//		}
+//
+//		final Point tilePoint = tile.getSceneLocation();
+//		final int tileX = tilePoint.getX();
+//		final int tileY = tilePoint.getY();
+//		final int tileZ = tile.getRenderLevel();
+//
+//		SceneTilePaint sceneTilePaint = tile.getSceneTilePaint();
+//		if (sceneTilePaint != null)
+//		{
+//			int[] uploadedTilePaintData = upload(
+//				tile, sceneTilePaint,
+//				tileZ, tileX, tileY,
+//				vertexBuffer, uvBuffer, normalBuffer,
+//				0, 0);
+//
+//			final int bufferLength = uploadedTilePaintData[0];
+//			final int uvBufferLength = uploadedTilePaintData[1];
+//			final int underwaterTerrain = uploadedTilePaintData[2];
+//			// pack a boolean into the buffer length of tiles so we can tell
+//			// which tiles have procedurally generated underwater terrain.
+//			// shift the bufferLength to make space for the boolean:
+//			int packedBufferLength = bufferLength << 1 | underwaterTerrain;
+//			sceneTilePaint.setBufferOffset(offset);
+//			sceneTilePaint.setUvBufferOffset(uvBufferLength > 0 ? uvoffset : -1);
+//			sceneTilePaint.setBufferLen(packedBufferLength);
+//			offset += bufferLength;
+//			uvoffset += uvBufferLength;
+//		}
+//
+//		SceneTileModel sceneTileModel = tile.getSceneTileModel();
+//		if (sceneTileModel != null)
+//		{
+//			int[] uploadedTileModelData = upload(
+//				tile, sceneTileModel,
+//				tileZ, tileX, tileY,
+//				vertexBuffer, uvBuffer, normalBuffer,
+//				0, 0);
+//
+//			final int bufferLength = uploadedTileModelData[0];
+//			final int uvBufferLength = uploadedTileModelData[1];
+//			final int underwaterTerrain = uploadedTileModelData[2];
+//			// pack a boolean into the buffer length of tiles so we can tell
+//			// which tiles have procedurally-generated underwater terrain
+//			int packedBufferLength = bufferLength << 1 | underwaterTerrain;
+//			sceneTileModel.setBufferOffset(offset);
+//			sceneTileModel.setUvBufferOffset(uvBufferLength > 0 ? uvoffset : -1);
+//			sceneTileModel.setBufferLen(packedBufferLength);
+//			offset += bufferLength;
+//			uvoffset += uvBufferLength;
+//		}
+//
+//		ObjectProperties objectProperties;
+//
+//		WallObject wallObject = tile.getWallObject();
+//		if (wallObject != null)
+//		{
+//			objectProperties = ObjectProperties.getObjectProperties(tile.getWallObject().getId());
+//
+//			Renderable renderable1 = wallObject.getRenderable1();
+//			if (renderable1 instanceof Model)
+//			{
+//				Model model = (Model) renderable1;
+//				uploadModel(model, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY, objectProperties, ObjectType.WALL_OBJECT);
+//			}
+//
+//			Renderable renderable2 = wallObject.getRenderable2();
+//			if (renderable2 instanceof Model)
+//			{
+//				Model model = (Model) renderable2;
+//				uploadModel(model, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY, objectProperties, ObjectType.WALL_OBJECT);
+//			}
+//		}
+//
+//		GroundObject groundObject = tile.getGroundObject();
+//		if (groundObject != null)
+//		{
+//			objectProperties = ObjectProperties.getObjectProperties(tile.getGroundObject().getId());
+//
+//			Renderable renderable = groundObject.getRenderable();
+//			if (renderable instanceof Model)
+//			{
+//				Model model = (Model) renderable;
+//				uploadModel(model, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY, objectProperties, ObjectType.GROUND_OBJECT);
+//			}
+//		}
+//
+//		DecorativeObject decorativeObject = tile.getDecorativeObject();
+//		if (decorativeObject != null)
+//		{
+//			objectProperties = ObjectProperties.getObjectProperties(tile.getDecorativeObject().getId());
+//
+//			Renderable renderable = decorativeObject.getRenderable();
+//			if (renderable instanceof Model)
+//			{
+//				Model model = (Model) renderable;
+//				uploadModel(model, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY, objectProperties, ObjectType.DECORATIVE_OBJECT);
+//			}
+//
+//			Renderable renderable2 = decorativeObject.getRenderable2();
+//			if (renderable2 instanceof Model)
+//			{
+//				Model model = (Model) renderable2;
+//				uploadModel(model, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY, objectProperties, ObjectType.DECORATIVE_OBJECT);
+//			}
+//		}
+//
+//		GameObject[] gameObjects = tile.getGameObjects();
+//		for (GameObject gameObject : gameObjects)
+//		{
+//			if (gameObject == null)
+//			{
+//				continue;
+//			}
+//
+//			objectProperties = ObjectProperties.getObjectProperties(gameObject.getId());
+//
+//			Renderable renderable = gameObject.getRenderable();
+//			if (renderable instanceof Model)
+//			{
+//				Model model = (Model) gameObject.getRenderable();
+//				uploadModel(model, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY, objectProperties, ObjectType.GAME_OBJECT);
+//			}
+//		}
+//	}
 
+	private void upload(Tile tile, GpuIntBuffer vertexBuffer, GpuFloatBuffer uvBuffer, GpuFloatBuffer normalBuffer) {
 		final Point tilePoint = tile.getSceneLocation();
 		final int tileX = tilePoint.getX();
 		final int tileY = tilePoint.getY();
 		final int tileZ = tile.getRenderLevel();
 
+		// Upload SceneTilePaint (if available)
 		SceneTilePaint sceneTilePaint = tile.getSceneTilePaint();
-		if (sceneTilePaint != null)
-		{
+		if (sceneTilePaint != null) {
 			int[] uploadedTilePaintData = upload(
-				tile, sceneTilePaint,
-				tileZ, tileX, tileY,
-				vertexBuffer, uvBuffer, normalBuffer,
-				0, 0);
+					tile, sceneTilePaint,
+					tileZ, tileX, tileY,
+					vertexBuffer, uvBuffer, normalBuffer,
+					0, 0);
 
 			final int bufferLength = uploadedTilePaintData[0];
 			final int uvBufferLength = uploadedTilePaintData[1];
 			final int underwaterTerrain = uploadedTilePaintData[2];
-			// pack a boolean into the buffer length of tiles so we can tell
-			// which tiles have procedurally generated underwater terrain.
-			// shift the bufferLength to make space for the boolean:
 			int packedBufferLength = bufferLength << 1 | underwaterTerrain;
 			sceneTilePaint.setBufferOffset(offset);
 			sceneTilePaint.setUvBufferOffset(uvBufferLength > 0 ? uvoffset : -1);
@@ -178,20 +308,18 @@ class SceneUploader
 			uvoffset += uvBufferLength;
 		}
 
+		// Upload SceneTileModel (if available)
 		SceneTileModel sceneTileModel = tile.getSceneTileModel();
-		if (sceneTileModel != null)
-		{
+		if (sceneTileModel != null) {
 			int[] uploadedTileModelData = upload(
-				tile, sceneTileModel,
-				tileZ, tileX, tileY,
-				vertexBuffer, uvBuffer, normalBuffer,
-				0, 0);
+					tile, sceneTileModel,
+					tileZ, tileX, tileY,
+					vertexBuffer, uvBuffer, normalBuffer,
+					0, 0);
 
 			final int bufferLength = uploadedTileModelData[0];
 			final int uvBufferLength = uploadedTileModelData[1];
 			final int underwaterTerrain = uploadedTileModelData[2];
-			// pack a boolean into the buffer length of tiles so we can tell
-			// which tiles have procedurally-generated underwater terrain
 			int packedBufferLength = bufferLength << 1 | underwaterTerrain;
 			sceneTileModel.setBufferOffset(offset);
 			sceneTileModel.setUvBufferOffset(uvBufferLength > 0 ? uvoffset : -1);
@@ -200,75 +328,80 @@ class SceneUploader
 			uvoffset += uvBufferLength;
 		}
 
-		ObjectProperties objectProperties;
+		// Process WallObject, GroundObject, DecorativeObject, and GameObjects (if available)
+		processWallObject(tile, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY);
+		processGroundObject(tile, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY);
+		processDecorativeObject(tile, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY);
+		processGameObjects(tile, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY);
+	}
 
+	private void processWallObject(Tile tile, GpuIntBuffer vertexBuffer, GpuFloatBuffer uvBuffer, GpuFloatBuffer normalBuffer, int tileZ, int tileX, int tileY) {
 		WallObject wallObject = tile.getWallObject();
-		if (wallObject != null)
-		{
-			objectProperties = ObjectProperties.getObjectProperties(tile.getWallObject().getId());
+		if (wallObject != null) {
+			int objectId = wallObject.getId();
+			ObjectProperties objectProperties = ObjectProperties.getObjectProperties(objectId);
 
 			Renderable renderable1 = wallObject.getRenderable1();
-			if (renderable1 instanceof Model)
-			{
+			if (renderable1 instanceof Model) {
 				Model model = (Model) renderable1;
 				uploadModel(model, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY, objectProperties, ObjectType.WALL_OBJECT);
 			}
 
 			Renderable renderable2 = wallObject.getRenderable2();
-			if (renderable2 instanceof Model)
-			{
+			if (renderable2 instanceof Model) {
 				Model model = (Model) renderable2;
 				uploadModel(model, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY, objectProperties, ObjectType.WALL_OBJECT);
 			}
 		}
+	}
 
+	private void processGroundObject(Tile tile, GpuIntBuffer vertexBuffer, GpuFloatBuffer uvBuffer, GpuFloatBuffer normalBuffer, int tileZ, int tileX, int tileY) {
 		GroundObject groundObject = tile.getGroundObject();
-		if (groundObject != null)
-		{
-			objectProperties = ObjectProperties.getObjectProperties(tile.getGroundObject().getId());
+		if (groundObject != null) {
+			int objectId = groundObject.getId();
+			ObjectProperties objectProperties = ObjectProperties.getObjectProperties(objectId);
 
 			Renderable renderable = groundObject.getRenderable();
-			if (renderable instanceof Model)
-			{
+			if (renderable instanceof Model) {
 				Model model = (Model) renderable;
 				uploadModel(model, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY, objectProperties, ObjectType.GROUND_OBJECT);
 			}
 		}
+	}
 
+	private void processDecorativeObject(Tile tile, GpuIntBuffer vertexBuffer, GpuFloatBuffer uvBuffer, GpuFloatBuffer normalBuffer, int tileZ, int tileX, int tileY) {
 		DecorativeObject decorativeObject = tile.getDecorativeObject();
-		if (decorativeObject != null)
-		{
-			objectProperties = ObjectProperties.getObjectProperties(tile.getDecorativeObject().getId());
+		if (decorativeObject != null) {
+			int objectId = decorativeObject.getId();
+			ObjectProperties objectProperties = ObjectProperties.getObjectProperties(objectId);
 
 			Renderable renderable = decorativeObject.getRenderable();
-			if (renderable instanceof Model)
-			{
+			if (renderable instanceof Model) {
 				Model model = (Model) renderable;
 				uploadModel(model, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY, objectProperties, ObjectType.DECORATIVE_OBJECT);
 			}
 
 			Renderable renderable2 = decorativeObject.getRenderable2();
-			if (renderable2 instanceof Model)
-			{
+			if (renderable2 instanceof Model) {
 				Model model = (Model) renderable2;
 				uploadModel(model, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY, objectProperties, ObjectType.DECORATIVE_OBJECT);
 			}
 		}
+	}
 
+	private void processGameObjects(Tile tile, GpuIntBuffer vertexBuffer, GpuFloatBuffer uvBuffer, GpuFloatBuffer normalBuffer, int tileZ, int tileX, int tileY) {
 		GameObject[] gameObjects = tile.getGameObjects();
-		for (GameObject gameObject : gameObjects)
-		{
-			if (gameObject == null)
-			{
+		for (GameObject gameObject : gameObjects) {
+			if (gameObject == null) {
 				continue;
 			}
 
-			objectProperties = ObjectProperties.getObjectProperties(gameObject.getId());
+			int objectId = gameObject.getId();
+			ObjectProperties objectProperties = ObjectProperties.getObjectProperties(objectId);
 
 			Renderable renderable = gameObject.getRenderable();
-			if (renderable instanceof Model)
-			{
-				Model model = (Model) gameObject.getRenderable();
+			if (renderable instanceof Model) {
+				Model model = (Model) renderable;
 				uploadModel(model, vertexBuffer, uvBuffer, normalBuffer, tileZ, tileX, tileY, objectProperties, ObjectType.GAME_OBJECT);
 			}
 		}

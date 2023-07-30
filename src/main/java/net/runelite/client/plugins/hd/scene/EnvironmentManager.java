@@ -27,6 +27,8 @@ package net.runelite.client.plugins.hd.scene;
 import com.google.common.primitives.Floats;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +49,9 @@ import net.runelite.client.plugins.hd.utils.Rect;
 @Slf4j
 public class EnvironmentManager
 {
+
+	private ExecutorService executorService = Executors.newSingleThreadExecutor();
+
 	@Inject
 	private Client client;
 
@@ -93,6 +98,8 @@ public class EnvironmentManager
 	public float[] currentWaterColor = new float[]{0,0,0};
 	private float[] targetWaterColor = new float[]{0,0,0};
 
+
+	private float[] blackFogColor = new float[]{0, 0, 0};
 	private int startFogDepth = 0;
 	public int currentFogDepth = 0;
 	private int targetFogDepth = 0;
@@ -151,19 +158,25 @@ public class EnvironmentManager
 
 	public boolean lightningEnabled = false;
 
-	public void update()
-	{
+	private float cubicInterpolate(float y0, float y1, float y2, float y3, float t) {
+		float a0, a1, a2, a3;
+		float t2 = t * t;
+		a0 = y3 - y2 - y0 + y1;
+		a1 = y0 - y1 - a0;
+		a2 = y2 - y0;
+		a3 = y1;
+		return a0 * t * t2 + a1 * t2 + a2 * t + a3;
+	}
+
+	public void update() {
 		WorldPoint camPosition = localPointToWorldTile(hdPlugin.camTarget[0], hdPlugin.camTarget[1]);
 		int camTargetX = camPosition.getX();
 		int camTargetY = camPosition.getY();
 		int camTargetZ = camPosition.getPlane();
 
-		for (Environment environment : sceneEnvironments)
-		{
-			if (environment.getArea().containsPoint(camTargetX, camTargetY, camTargetZ))
-			{
-				if (environment != currentEnvironment)
-				{
+		for (Environment environment : sceneEnvironments) {
+			if (environment.getArea().containsPoint(camTargetX, camTargetY, camTargetZ)) {
+				if (environment != currentEnvironment) {
 					if (environment == Environment.PLAYER_OWNED_HOUSE || environment == Environment.PLAYER_OWNED_HOUSE_SNOWY) {
 						hdPlugin.setInHouse(true);
 						hdPlugin.setNextSceneReload(System.currentTimeMillis() + 2500);
@@ -180,60 +193,38 @@ public class EnvironmentManager
 		}
 
 		if (lastSkyColor != config.defaultSkyColor() ||
-			lastEnvironmentLighting != config.atmosphericLighting() ||
-			lastSkyOverride != config.overrideSky() ||
-			lastUnderwater != isUnderwater())
-		{
+				lastEnvironmentLighting != config.atmosphericLighting() ||
+				lastSkyOverride != config.overrideSky() ||
+				lastUnderwater != isUnderwater()) {
 			changeEnvironment(currentEnvironment, camTargetX, camTargetY, true);
 		}
 
-		// modify all environment values during transition
+		// Perform cubic interpolation for each environmental parameter
 		long currentTime = System.currentTimeMillis();
-		if (currentTime >= transitionCompleteTime)
-		{
-			currentFogColor = targetFogColor;
-			currentWaterColor = targetWaterColor;
-			currentFogDepth = targetFogDepth;
-			currentAmbientStrength = targetAmbientStrength;
-			currentAmbientColor = targetAmbientColor;
-			currentDirectionalStrength = targetDirectionalStrength;
-			currentDirectionalColor = targetDirectionalColor;
-			currentUnderglowStrength = targetUnderglowStrength;
-			currentUnderglowColor = targetUnderglowColor;
-			currentGroundFogStart = targetGroundFogStart;
-			currentGroundFogEnd = targetGroundFogEnd;
-			currentGroundFogOpacity = targetGroundFogOpacity;
-			currentLightPitch = targetLightPitch;
-			currentLightYaw = targetLightYaw;
-			currentUnderwaterCausticsColor = targetUnderwaterCausticsColor;
-			currentUnderwaterCausticsStrength = targetUnderwaterCausticsStrength;
-		}
-		else
-		{
-			// interpolate between start and target values
-			float t = (float)(currentTime - startTime) / (float)transitionDuration;
+		float t = (float) (currentTime - startTime) / (float) transitionDuration;
+		t = Math.max(0.0f, Math.min(1.0f, t)); // Clamp t between 0 and 1
 
-			currentFogColor = HDUtils.lerpVectors(startFogColor, targetFogColor, t);
-			currentWaterColor = HDUtils.lerpVectors(startWaterColor, targetWaterColor, t);
-			currentFogDepth = (int) HDUtils.lerp(startFogDepth, targetFogDepth, t);
-			currentAmbientStrength = HDUtils.lerp(startAmbientStrength, targetAmbientStrength, t);
-			currentAmbientColor = HDUtils.lerpVectors(startAmbientColor, targetAmbientColor, t);
-			currentDirectionalStrength = HDUtils.lerp(startDirectionalStrength, targetDirectionalStrength, t);
-			currentDirectionalColor = HDUtils.lerpVectors(startDirectionalColor, targetDirectionalColor, t);
-			currentUnderglowStrength = HDUtils.lerp(startUnderglowStrength, targetUnderglowStrength, t);
-			currentUnderglowColor = HDUtils.lerpVectors(startUnderglowColor, targetUnderglowColor, t);
-			currentGroundFogStart  = HDUtils.lerp(startGroundFogStart, targetGroundFogStart, t);
-			currentGroundFogEnd  = HDUtils.lerp(startGroundFogEnd, targetGroundFogEnd, t);
-			currentGroundFogOpacity  = HDUtils.lerp(startGroundFogOpacity, targetGroundFogOpacity, t);
-			currentLightPitch = HDUtils.lerp(startLightPitch, targetLightPitch, t);
-			currentLightYaw = HDUtils.lerp(startLightYaw, targetLightYaw, t);
-			currentUnderwaterCausticsColor = HDUtils.lerpVectors(startUnderwaterCausticsColor, targetUnderwaterCausticsColor, t);
-			currentUnderwaterCausticsStrength = HDUtils.lerp(startUnderwaterCausticsStrength, targetUnderwaterCausticsStrength, t);
-		}
+		currentFogColor = HDUtils.lerpVectors(startFogColor, targetFogColor, cubicInterpolate(0, 0, 1, 1, t));
+		currentWaterColor = HDUtils.lerpVectors(startWaterColor, targetWaterColor, cubicInterpolate(0, 0, 1, 1, t));
+		currentFogDepth = (int) HDUtils.lerp(startFogDepth, targetFogDepth, cubicInterpolate(0, 0, 1, 1, t));
+		currentAmbientStrength = HDUtils.lerp(startAmbientStrength, targetAmbientStrength, cubicInterpolate(0, 0, 1, 1, t));
+		currentAmbientColor = HDUtils.lerpVectors(startAmbientColor, targetAmbientColor, cubicInterpolate(0, 0, 1, 1, t));
+		currentDirectionalStrength = HDUtils.lerp(startDirectionalStrength, targetDirectionalStrength, cubicInterpolate(0, 0, 1, 1, t));
+		currentDirectionalColor = HDUtils.lerpVectors(startDirectionalColor, targetDirectionalColor, cubicInterpolate(0, 0, 1, 1, t));
+		currentUnderglowStrength = HDUtils.lerp(startUnderglowStrength, targetUnderglowStrength, cubicInterpolate(0, 0, 1, 1, t));
+		currentUnderglowColor = HDUtils.lerpVectors(startUnderglowColor, targetUnderglowColor, cubicInterpolate(0, 0, 1, 1, t));
+		currentGroundFogStart = HDUtils.lerp(startGroundFogStart, targetGroundFogStart, cubicInterpolate(0, 0, 1, 1, t));
+		currentGroundFogEnd = HDUtils.lerp(startGroundFogEnd, targetGroundFogEnd, cubicInterpolate(0, 0, 1, 1, t));
+		currentGroundFogOpacity = HDUtils.lerp(startGroundFogOpacity, targetGroundFogOpacity, cubicInterpolate(0, 0, 1, 1, t));
+		currentLightPitch = HDUtils.lerp(startLightPitch, targetLightPitch, cubicInterpolate(0, 0, 1, 1, t));
+		currentLightYaw = HDUtils.lerp(startLightYaw, targetLightYaw, cubicInterpolate(0, 0, 1, 1, t));
+		currentUnderwaterCausticsColor = HDUtils.lerpVectors(startUnderwaterCausticsColor, targetUnderwaterCausticsColor, cubicInterpolate(0, 0, 1, 1, t));
+		currentUnderwaterCausticsStrength = HDUtils.lerp(startUnderwaterCausticsStrength, targetUnderwaterCausticsStrength, cubicInterpolate(0, 0, 1, 1, t));
 
+		// Update the lightning effects
 		updateLightning();
 
-		// update some things for use next frame
+		// Update some variables for use in the next frame
 		prevCamTargetX = camTargetX;
 		prevCamTargetY = camTargetY;
 		lastFrameTime = System.currentTimeMillis();
@@ -250,15 +241,14 @@ public class EnvironmentManager
 	 * @param camTargetX
 	 * @param camTargetY
 	 */
-	private void changeEnvironment(Environment newEnvironment, int camTargetX, int camTargetY, boolean instantChange)
-	{
+	private void changeEnvironment(Environment newEnvironment, int camTargetX, int camTargetY, boolean instantChange) {
 		currentEnvironment = newEnvironment;
 		log.debug("currentEnvironment changed to " + newEnvironment);
 
 		startTime = System.currentTimeMillis();
 		transitionCompleteTime = instantChange ? 0 : startTime + transitionDuration;
 
-		// set previous variables to current ones
+		// Set previous variables to current ones
 		startFogColor = currentFogColor;
 		startWaterColor = currentWaterColor;
 		startFogDepth = currentFogDepth;
@@ -279,76 +269,36 @@ public class EnvironmentManager
 		updateSkyColor();
 
 		targetFogDepth = newEnvironment.getFogDepth();
-		if (hdPlugin.configWinterTheme)
-		{
-			if (!newEnvironment.isCustomFogDepth())
-			{
-				targetFogDepth = Environment.WINTER.getFogDepth();
-			}
+		if (hdPlugin.configWinterTheme && !newEnvironment.isCustomFogDepth()) {
+			targetFogDepth = Environment.WINTER.getFogDepth();
 		}
 
-		if (config.atmosphericLighting())
-		{
-			targetAmbientStrength = newEnvironment.getAmbientStrength();
-			targetAmbientColor = newEnvironment.getAmbientColor();
-			targetDirectionalStrength = newEnvironment.getDirectionalStrength();
-			targetDirectionalColor = newEnvironment.getDirectionalColor();
-			targetUnderglowStrength = newEnvironment.getUnderglowStrength();
-			targetUnderglowColor = newEnvironment.getUnderglowColor();
-			targetLightPitch = newEnvironment.getLightPitch();
-			targetLightYaw = newEnvironment.getLightYaw();
+		targetAmbientStrength = config.atmosphericLighting() ? newEnvironment.getAmbientStrength() : defaultEnvironment.getAmbientStrength();
+		targetAmbientColor = config.atmosphericLighting() ? newEnvironment.getAmbientColor() : defaultEnvironment.getAmbientColor();
+		targetDirectionalStrength = config.atmosphericLighting() ? newEnvironment.getDirectionalStrength() : defaultEnvironment.getDirectionalStrength();
+		targetDirectionalColor = config.atmosphericLighting() ? newEnvironment.getDirectionalColor() : defaultEnvironment.getDirectionalColor();
+		targetUnderglowStrength = config.atmosphericLighting() ? newEnvironment.getUnderglowStrength() : defaultEnvironment.getUnderglowStrength();
+		targetUnderglowColor = config.atmosphericLighting() ? newEnvironment.getUnderglowColor() : defaultEnvironment.getUnderglowColor();
+		targetLightPitch = config.atmosphericLighting() ? newEnvironment.getLightPitch() : defaultEnvironment.getLightPitch();
+		targetLightYaw = config.atmosphericLighting() ? newEnvironment.getLightYaw() : defaultEnvironment.getLightYaw();
 
-			if (hdPlugin.configWinterTheme)
-			{
-				if (!newEnvironment.isCustomAmbientStrength())
-				{
+		if (hdPlugin.configWinterTheme) {
+			if (!config.atmosphericLighting()) {
+				if (!defaultEnvironment.isCustomAmbientStrength()) {
 					targetAmbientStrength = Environment.WINTER.getAmbientStrength();
 				}
-				if (!newEnvironment.isCustomAmbientColor())
-				{
+				if (!defaultEnvironment.isCustomAmbientColor()) {
 					targetAmbientColor = Environment.WINTER.getAmbientColor();
 				}
-				if (!newEnvironment.isCustomDirectionalStrength())
-				{
+				if (!defaultEnvironment.isCustomDirectionalStrength()) {
 					targetDirectionalStrength = Environment.WINTER.getDirectionalStrength();
 				}
-				if (!newEnvironment.isCustomDirectionalColor())
-				{
+				if (!defaultEnvironment.isCustomDirectionalColor()) {
 					targetDirectionalColor = Environment.WINTER.getDirectionalColor();
 				}
 			}
 		}
-		else
-		{
-			targetAmbientStrength = defaultEnvironment.getAmbientStrength();
-			targetAmbientColor = defaultEnvironment.getAmbientColor();
-			targetDirectionalStrength = defaultEnvironment.getDirectionalStrength();
-			targetDirectionalColor = defaultEnvironment.getDirectionalColor();
-			targetUnderglowStrength = defaultEnvironment.getUnderglowStrength();
-			targetUnderglowColor = defaultEnvironment.getUnderglowColor();
-			targetLightPitch = defaultEnvironment.getLightPitch();
-			targetLightYaw = defaultEnvironment.getLightYaw();
 
-			if (hdPlugin.configWinterTheme)
-			{
-				if (!defaultEnvironment.isCustomAmbientStrength())
-				{
-					targetAmbientStrength = Environment.WINTER.getAmbientStrength();
-				}
-				if (!defaultEnvironment.isCustomAmbientColor())
-				{
-					targetAmbientColor = Environment.WINTER.getAmbientColor();
-				}
-				if (!defaultEnvironment.isCustomDirectionalStrength())
-				{
-					targetDirectionalStrength = Environment.WINTER.getDirectionalStrength();
-				}
-				if (!defaultEnvironment.isCustomDirectionalColor())
-				{
-					targetDirectionalColor = Environment.WINTER.getDirectionalColor();
-				}
-			}
-		}
 		targetGroundFogStart = newEnvironment.getGroundFogStart();
 		targetGroundFogEnd = newEnvironment.getGroundFogEnd();
 		targetGroundFogOpacity = newEnvironment.getGroundFogOpacity();
@@ -361,11 +311,10 @@ public class EnvironmentManager
 		int tileChangeY = Math.abs(prevCamTargetY - camTargetY);
 		int tileChange = Math.max(tileChangeX, tileChangeY);
 
-		// skip the transitional fade if the player has moved too far
-		// since the previous frame. results in an instant transition when
+		// Skip the transitional fade if the player has moved too far
+		// since the previous frame. Results in an instant transition when
 		// teleporting, entering dungeons, etc.
-		if (tileChange >= skipTransitionTiles)
-		{
+		if (tileChange >= skipTransitionTiles) {
 			transitionCompleteTime = startTime;
 		}
 	}
@@ -373,9 +322,9 @@ public class EnvironmentManager
 	public void updateSkyColor()
 	{
 		Environment env = hdPlugin.configWinterTheme ? Environment.WINTER : currentEnvironment;
-		if (!env.isCustomFogColor() || env.isAllowSkyOverride() && config.overrideSky())
+		DefaultSkyColor sky = config.defaultSkyColor();
+		if (!env.isCustomFogColor() || (env.isAllowSkyOverride() && config.overrideSky()))
 		{
-			DefaultSkyColor sky = config.defaultSkyColor();
 			targetFogColor = sky.getRgb(client);
 			if (sky == DefaultSkyColor.OSRS)
 			{
@@ -389,12 +338,26 @@ public class EnvironmentManager
 		}
 
 
-		//override with decoupled water/sky color if present
-		if(currentEnvironment.isCustomWaterColor())
+		// Override with decoupled water/sky color if present
+		if (currentEnvironment.isCustomWaterColor())
 		{
 			targetWaterColor = currentEnvironment.getWaterColor();
 		}
 	}
+
+
+	public void loadSceneEnvironmentsAsync()
+	{
+		// You can perform any post-loading tasks here if needed.
+		executorService.execute(this::loadSceneEnvironments);
+	}
+
+	public void shutdownExecutorService()
+	{
+		executorService.shutdown();
+	}
+
+
 
 	/**
 	 * Figures out which Areas exist in the current scene and
@@ -510,18 +473,9 @@ public class EnvironmentManager
 	 */
 	void generateNextLightningTime()
 	{
-		int lightningInterval = (int)(minLightningInterval + ((maxLightningInterval - minLightningInterval) * Math.random()));
-		int quickLightningInterval = (int)(minQuickLightningInterval + ((maxQuickLightningInterval - minQuickLightningInterval) * Math.random()));
-		if (Math.random() <= 1f / quickLightningChance)
-		{
-			// chain together lighting strikes in quick succession
-			nextLightningTime = System.currentTimeMillis() + quickLightningInterval;
-		}
-		else
-		{
-			// cool-down period before a new lightning cluster
-			nextLightningTime = System.currentTimeMillis() + lightningInterval;
-		}
+		int lightningInterval = (int) (minLightningInterval + ((maxLightningInterval - minLightningInterval) * Math.random()));
+		int quickLightningInterval = (int) (minQuickLightningInterval + ((maxQuickLightningInterval - minQuickLightningInterval) * Math.random()));
+		nextLightningTime = System.currentTimeMillis() + (Math.random() <= 1f / quickLightningChance ? quickLightningInterval : lightningInterval);
 	}
 
 	/**
@@ -532,8 +486,8 @@ public class EnvironmentManager
 	 */
 	public float[] getFogColor()
 	{
-		return Arrays.copyOf(client.getGameState().getState() >= GameState.LOADING.getState() ?
-			currentFogColor : BLACK_COLOR, 3);
+		return client.getGameState().getState() >= GameState.LOADING.getState() ?
+				Arrays.copyOf(currentFogColor, 3) : blackFogColor;
 	}
 
 	/**
